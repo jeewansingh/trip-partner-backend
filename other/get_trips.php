@@ -26,12 +26,30 @@ function getTrips($destination_id = null) {
     if ($result && mysqli_num_rows($result) > 0) {
         $trips = [];
         while ($row = mysqli_fetch_assoc($result)) {
+            $trip_id = $row['id'];
+
+            // Get dynamic interests from trip_interest table
+            $interest_query = "
+                SELECT interest.name 
+                FROM trip_interest
+                INNER JOIN interest ON trip_interest.interest_id = interest.id
+                WHERE trip_interest.trip_id = $trip_id
+            ";
+            $interest_result = mysqli_query($conn, $interest_query);
+            $interests = [];
+            if ($interest_result && mysqli_num_rows($interest_result) > 0) {
+                while ($irow = mysqli_fetch_assoc($interest_result)) {
+                    $interests[] = $irow['name'];
+                }
+            }
+            $row['interests'] = $interests;
+
+            // Handle user image
             $row['user_image'] = $row['user_image']
                 ? 'http://localhost/trippartner/uploads/' . $row['user_image']
                 : 'http://localhost/trippartner/uploads/default_dest.jpg';
 
-            $row['interests'] = ['beach', 'adventure', 'culture'];
-
+            // Trip duration
             if (!empty($row['start_date']) && !empty($row['end_date'])) {
                 $start_date = new DateTime($row['start_date']);
                 $end_date = new DateTime($row['end_date']);

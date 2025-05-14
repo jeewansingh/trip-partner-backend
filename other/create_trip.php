@@ -2,19 +2,6 @@
 
 require_once "../db_conn.php";
 include("../function/response.php"); 
-function getUserIdFromToken($token) {
-    global $conn;
-    $sql = "SELECT id FROM user WHERE token = '$token' AND is_active = 1";
-    $result = mysqli_query($conn, $sql);
-    
-    if ($result && mysqli_num_rows($result) > 0) {
-        $row = mysqli_fetch_assoc($result);
-        return $row['id'];
-    } else {
-        return null; // Invalid token
-    }
-}
-
 
 $sql_create = "CREATE TABLE IF NOT EXISTS trip (
     id INT(11) AUTO_INCREMENT PRIMARY KEY,
@@ -45,7 +32,8 @@ if (mysqli_query($conn, $sql_create)) {
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
-    $token       = $_POST['token']; // Token passed from frontend
+
+    $token       = $_POST['token'];
     $name        = $_POST['name'];
     $description = $_POST['description'];
     $budget      = $_POST['budget'];
@@ -53,8 +41,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $start_date  = $_POST['start_date'];
     $end_date    = $_POST['end_date'];
     $p_gender    = $_POST['p_gender'];
-    $is_active   = isset($_POST['is_active']) ? $_POST['is_active'] : 1; 
-    
+   $interests = json_decode($_POST['interests'], true); // Expecting array of interest_ids
+    $is_active   = isset($_POST['is_active']) ? $_POST['is_active'] : 1;
+
     $user_id = getUserIdFromToken($token);
 
     if (!$user_id) {
@@ -62,47 +51,30 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         exit;
     }
 
-
-    if (empty($name) || empty($description) || empty($budget) || empty($location) || empty($start_date) || empty($end_date) || empty($p_gender)) {
+    if (empty($name) || empty($description) || empty($interests) || empty($budget) || empty($location) || empty($start_date) || empty($end_date) || empty($p_gender)) {
         api_error_response("All fields are required.");
     }
 
+    // Insert the trip
     $sql_insert = "INSERT INTO trip (name, description, budget, location, start_date, end_date, created_by, p_gender, is_active)
                    VALUES ('$name', '$description', '$budget', '$location', '$start_date', '$end_date', '$user_id', '$p_gender', '$is_active')";
 
-
     if (mysqli_query($conn, $sql_insert)) {
+        $trip_id = mysqli_insert_id($conn); // Get inserted trip ID
+
+        // Insert interests into trip_interest
+        foreach ($interests as $interest_id) {
+            $interest_id = mysqli_real_escape_string($conn, $interest_id);
+            $insert_interest = "INSERT INTO trip_interest (trip_id, interest_id) VALUES ('$trip_id', '$interest_id')";
+            mysqli_query($conn, $insert_interest); // Optional: check for failure
+        }
+
         api_success_response("Trip created successfully.");
     } else {
         api_error_response("Error creating trip: " . mysqli_error($conn));
     }
 
-
     mysqli_close($conn);
 }
 
-
-// Handle GET method for fetching trips
-if ($_SERVER["REQUEST_METHOD"] == "GE T") {
-    $token = $_GET['token']; // Token passed from frontend
-
-    // Get the user ID from the token
-    $user_id = getUserIdFromToken($token);
-
-    if (!$user_id) {
-        api_error_response("Invalid token or user not found.");
-        exit;
-    }
-
-    // Fetch trips created by the user
-    $trips = getTrips($user_id);
-
-    if ($trips) {
-        echo json_encode($trips); // Return the trips as JSON response
-    } else {
-        api_error_response("No trips found.");
-    }
-
-    mysqli_close($conn);
-}
 ?>
