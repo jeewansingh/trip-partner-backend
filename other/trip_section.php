@@ -1,34 +1,45 @@
 <?php
 
 require_once "../db_conn.php";
-include("../function/response.php"); 
+include("../function/response.php");
 
-    $token = $_POST['token'];
+$token = $_POST['token'];
 
-  // Get user_id from token
-    $user_id = getUserIdFromToken($token); // You need to implement this
-    if (!$user_id) {
-        api_error_response("Invalid token or user not found.");
+// Get user_id from token
+$user_id = getUserIdFromToken($token); // You need to implement this
+if (!$user_id) {
+    api_error_response("Invalid token or user not found.");
     exit;
-    }
+}
 
-function getTrips($destination_id = null, $user_id) {
+function getTrips($destination_id = null, $user_id)
+{
     global $conn;
 
-    // Base SQL query
+    // Escape destination ID if provided
+    $destination_filter = "";
+    if (!empty($destination_id)) {
+        $destination_id = mysqli_real_escape_string($conn, $destination_id);
+        $destination_filter = " AND trip.location = '$destination_id'";
+    }
+
+    // Query to get trips with join_request count
     $sql = "
-        SELECT trip.*, user.name AS createdBy, user.image AS user_image, destination.name AS location 
+        SELECT 
+            trip.*, 
+            user.name AS createdBy, 
+            user.image AS user_image, 
+            destination.name AS location,
+            COUNT(join_request.id) AS join_count
         FROM trip
         INNER JOIN user ON trip.created_by = user.id
         INNER JOIN destination ON trip.location = destination.id
-        WHERE trip.is_active = 1 order by trip.id
+        LEFT JOIN join_request ON trip.id = join_request.trip_id
+        WHERE trip.is_active = 1 $destination_filter
+        GROUP BY trip.id
+        ORDER BY join_count DESC
+        LIMIT 3
     ";
-
-    // If a destination_id is provided, add it to the query
-    if (!empty($destination_id)) {
-        $destination_id = mysqli_real_escape_string($conn, $destination_id);
-        $sql .= " AND trip.location = '$destination_id'";
-    }
 
     $result = mysqli_query($conn, $sql);
 
@@ -37,7 +48,7 @@ function getTrips($destination_id = null, $user_id) {
         while ($row = mysqli_fetch_assoc($result)) {
             $trip_id = $row['id'];
 
-            // Get dynamic interests from trip_interest table
+            // Get interests for the trip
             $interest_query = "
                 SELECT interest.name 
                 FROM trip_interest
@@ -53,12 +64,12 @@ function getTrips($destination_id = null, $user_id) {
             }
             $row['interests'] = $interests;
 
-            // Handle user image
+            // Image path
             $row['user_image'] = $row['user_image']
                 ? 'http://localhost/trippartner/uploads/' . $row['user_image']
                 : 'http://localhost/trippartner/uploads/default_dest.jpg';
 
-            // Trip duration
+            // Duration
             if (!empty($row['start_date']) && !empty($row['end_date'])) {
                 $start_date = new DateTime($row['start_date']);
                 $end_date = new DateTime($row['end_date']);
@@ -69,23 +80,14 @@ function getTrips($destination_id = null, $user_id) {
             }
 
             $row['date'] = $row['start_date'];
-            
 
-            if ($user_id == $row['created_by']){
-                    $row['same_creator'] = 1;
-            } else {
-                $row['same_creator'] = 0;
-            }
+            // Created by same user?
+            $row['same_creator'] = ($user_id == $row['created_by']) ? 1 : 0;
 
-            // Check if already have join request
-            $join_query = "SELECT * FROM join_request WHERE sender_id = $user_id AND trip_id = $trip_id";
-            $join_result = mysqli_query($conn, $join_query);
-           
-            if ($join_result && mysqli_num_rows($join_result) > 0) {
-               $row['join_request'] = 1;
-            } else {
-                $row['join_request'] = 0;
-            }
+            // User already sent join request?
+            $join_check_query = "SELECT id FROM join_request WHERE sender_id = $user_id AND trip_id = $trip_id";
+            $join_result = mysqli_query($conn, $join_check_query);
+            $row['join_request'] = ($join_result && mysqli_num_rows($join_result) > 0) ? 1 : 0;
 
             $trips[] = $row;
         }
@@ -99,12 +101,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $destination_id = $_POST['destination_id'] ?? null;
     $trips = getTrips($destination_id, $user_id);
 
-    if ($trips) {
-        echo json_encode($trips);
-    } else {
-        echo json_encode(["error" => "No trips found."]);
-    }
-
+    echo json_encode($trips ?: ["error" => "No trips found."]);
     mysqli_close($conn);
 }
 ?>

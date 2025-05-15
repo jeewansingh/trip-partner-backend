@@ -3,6 +3,7 @@
 require_once "../db_conn.php";
 include("../function/response.php"); 
 
+
 $sql_create = "CREATE TABLE IF NOT EXISTS trip (
     id INT(11) AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
@@ -41,7 +42,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $start_date  = $_POST['start_date'];
     $end_date    = $_POST['end_date'];
     $p_gender    = $_POST['p_gender'];
-   $interests = json_decode($_POST['interests'], true); // Expecting array of interest_ids
+    $interests = json_decode($_POST['interests'], true); // Expecting array of interest_ids
     $is_active   = isset($_POST['is_active']) ? $_POST['is_active'] : 1;
 
     $user_id = getUserIdFromToken($token);
