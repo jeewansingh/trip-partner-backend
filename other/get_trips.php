@@ -16,19 +16,20 @@ function getTrips($destination_id = null, $user_id) {
     global $conn;
 
     // Base SQL query
-    $sql = "
-        SELECT trip.*, user.name AS createdBy, user.image AS user_image, destination.name AS location 
-        FROM trip
-        INNER JOIN user ON trip.created_by = user.id
-        INNER JOIN destination ON trip.location = destination.id
-        WHERE trip.is_active = 1 order by trip.id
-    ";
+ $sql = "
+    SELECT trip.*, user.name AS createdBy, user.image AS user_image, destination.name AS location 
+    FROM trip
+    INNER JOIN user ON trip.created_by = user.id
+    INNER JOIN destination ON trip.location = destination.id
+    WHERE trip.is_active = 1
+";
 
-    // If a destination_id is provided, add it to the query
-    if (!empty($destination_id)) {
-        $destination_id = mysqli_real_escape_string($conn, $destination_id);
-        $sql .= " AND trip.location = '$destination_id'";
-    }
+if (!empty($destination_id)) {
+    $destination_id = mysqli_real_escape_string($conn, $destination_id);
+    $sql .= " AND trip.location = '$destination_id'";
+}
+
+$sql .= " ORDER BY trip.id";  // Move this outside the main SQL string
 
     $result = mysqli_query($conn, $sql);
 
