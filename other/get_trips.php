@@ -15,51 +15,68 @@ include("../function/response.php");
 function getTrips($destination_id = null, $user_id) {
     global $conn;
 
-    // Base SQL query
- $sql = "
-    SELECT trip.*, user.name AS createdBy, user.image AS user_image, destination.name AS location 
-    FROM trip
-    INNER JOIN user ON trip.created_by = user.id
-    INNER JOIN destination ON trip.location = destination.id
-    WHERE trip.is_active = 1
-";
+    // 1. Fetch user interests
+    $user_interest_query = "SELECT interest_id FROM user_interest WHERE user_id = $user_id";
+    $user_interest_result = mysqli_query($conn, $user_interest_query);
+    $user_interests = [];
+    if ($user_interest_result && mysqli_num_rows($user_interest_result) > 0) {
+        while ($row = mysqli_fetch_assoc($user_interest_result)) {
+            $user_interests[] = $row['interest_id'];
+        }
+    }
 
-if (!empty($destination_id)) {
-    $destination_id = mysqli_real_escape_string($conn, $destination_id);
-    $sql .= " AND trip.location = '$destination_id'";
-}
+    // 2. Base SQL query
+    $sql = "
+        SELECT trip.*, user.name AS createdBy, user.image AS user_image, destination.name AS location 
+        FROM trip
+        INNER JOIN user ON trip.created_by = user.id
+        INNER JOIN destination ON trip.location = destination.id
+        WHERE trip.is_active = 1
+    ";
 
-$sql .= " ORDER BY trip.id";  // Move this outside the main SQL string
+    if (!empty($destination_id)) {
+        $destination_id = mysqli_real_escape_string($conn, $destination_id);
+        $sql .= " AND trip.location = '$destination_id'";
+    }
+
+    $sql .= " ORDER BY trip.id";
 
     $result = mysqli_query($conn, $sql);
 
+    $trips = [];
+
     if ($result && mysqli_num_rows($result) > 0) {
-        $trips = [];
         while ($row = mysqli_fetch_assoc($result)) {
             $trip_id = $row['id'];
 
-            // Get dynamic interests from trip_interest table
+            // 3. Fetch trip interests
             $interest_query = "
-                SELECT interest.name 
+                SELECT interest.id, interest.name 
                 FROM trip_interest
                 INNER JOIN interest ON trip_interest.interest_id = interest.id
                 WHERE trip_interest.trip_id = $trip_id
             ";
             $interest_result = mysqli_query($conn, $interest_query);
-            $interests = [];
+            $trip_interests = [];
+            $trip_interest_ids = [];
+
             if ($interest_result && mysqli_num_rows($interest_result) > 0) {
                 while ($irow = mysqli_fetch_assoc($interest_result)) {
-                    $interests[] = $irow['name'];
+                    $trip_interests[] = $irow['name'];
+                    $trip_interest_ids[] = $irow['id'];
                 }
             }
-            $row['interests'] = $interests;
+            $row['interests'] = $trip_interests;
 
-            // Handle user image
+            // 4. Calculate matching score
+            $matched_interests = array_intersect($user_interests, $trip_interest_ids);
+            $row['match_score'] = count($matched_interests);
+
+            // 5. Handle image, duration, creator
             $row['user_image'] = $row['user_image']
                 ? 'http://localhost/trippartner/uploads/' . $row['user_image']
                 : 'http://localhost/trippartner/uploads/default_dest.jpg';
 
-            // Trip duration
             if (!empty($row['start_date']) && !empty($row['end_date'])) {
                 $start_date = new DateTime($row['start_date']);
                 $end_date = new DateTime($row['end_date']);
@@ -70,31 +87,26 @@ $sql .= " ORDER BY trip.id";  // Move this outside the main SQL string
             }
 
             $row['date'] = $row['start_date'];
-            
 
-            if ($user_id == $row['created_by']){
-                    $row['same_creator'] = 1;
-            } else {
-                $row['same_creator'] = 0;
-            }
+            $row['same_creator'] = ($user_id == $row['created_by']) ? 1 : 0;
 
-            // Check if already have join request
+            // 6. Join request check
             $join_query = "SELECT * FROM join_request WHERE sender_id = $user_id AND trip_id = $trip_id";
             $join_result = mysqli_query($conn, $join_query);
-           
-            if ($join_result && mysqli_num_rows($join_result) > 0) {
-               $row['join_request'] = 1;
-            } else {
-                $row['join_request'] = 0;
-            }
+            $row['join_request'] = ($join_result && mysqli_num_rows($join_result) > 0) ? 1 : 0;
 
             $trips[] = $row;
         }
-        return $trips;
-    } else {
-        return [];
     }
+
+    // 7. Sort trips by match_score DESC
+    usort($trips, function($a, $b) {
+        return $b['match_score'] - $a['match_score'];
+    });
+
+    return $trips;
 }
+
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $destination_id = $_POST['destination_id'] ?? null;
@@ -109,3 +121,4 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     mysqli_close($conn);
 }
 ?>
+
