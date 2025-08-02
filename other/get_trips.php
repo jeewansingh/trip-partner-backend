@@ -25,13 +25,14 @@ function getTrips($destination_id = null, $user_id) {
         }
     }
 
+
     // 2. Base SQL query
     $sql = "
         SELECT trip.*, user.name AS createdBy, user.image AS user_image, destination.name AS location 
         FROM trip
         INNER JOIN user ON trip.created_by = user.id
         INNER JOIN destination ON trip.location = destination.id
-        WHERE trip.is_active = 1
+        WHERE trip.is_active = 1 AND user.is_active = 1
     ";
 
     if (!empty($destination_id)) {
@@ -42,7 +43,6 @@ function getTrips($destination_id = null, $user_id) {
     $sql .= " ORDER BY trip.id";
 
     $result = mysqli_query($conn, $sql);
-
     $trips = [];
 
     if ($result && mysqli_num_rows($result) > 0) {
@@ -66,11 +66,26 @@ function getTrips($destination_id = null, $user_id) {
                     $trip_interest_ids[] = $irow['id'];
                 }
             }
+
             $row['interests'] = $trip_interests;
 
             // 4. Calculate matching score
             $matched_interests = array_intersect($user_interests, $trip_interest_ids);
-            $row['match_score'] = count($matched_interests);
+            
+            $dot_product = count($matched_interests);
+
+            $norm_user = sqrt(count($user_interests));
+            $norm_trip = sqrt(count($trip_interest_ids));
+
+            // Avoid division by zero
+            if ($norm_user > 0 && $norm_trip > 0) {
+                $cosine_similarity = $dot_product / ($norm_user * $norm_trip);
+            } else {
+                $cosine_similarity = 0;
+            }
+
+            $row['match_score'] = $cosine_similarity;
+
 
             // 5. Handle image, duration, creator
             $row['user_image'] = $row['user_image']
@@ -87,7 +102,6 @@ function getTrips($destination_id = null, $user_id) {
             }
 
             $row['date'] = $row['start_date'];
-
             $row['same_creator'] = ($user_id == $row['created_by']) ? 1 : 0;
 
             // 6. Join request check
@@ -95,17 +109,20 @@ function getTrips($destination_id = null, $user_id) {
             $join_result = mysqli_query($conn, $join_query);
             $row['join_request'] = ($join_result && mysqli_num_rows($join_result) > 0) ? 1 : 0;
 
+
             $trips[] = $row;
         }
     }
 
     // 7. Sort trips by match_score DESC
     usort($trips, function($a, $b) {
-        return $b['match_score'] - $a['match_score'];
-    });
+    return $b['match_score'] <=> $a['match_score'];
+});
+
 
     return $trips;
 }
+
 
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {

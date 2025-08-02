@@ -15,9 +15,10 @@ $sql = "
         d.name, 
         d.description, 
         d.image,
-        COUNT(t.id) AS trip_count
+        COUNT(CASE WHEN t.is_active = 1 AND u.is_active = 1 THEN t.id END) AS trip_count
     FROM destination d
     LEFT JOIN trip t ON d.id = t.location
+    LEFT JOIN user u ON t.created_by = u.id
     WHERE d.is_active = 1
     GROUP BY d.id
     ORDER BY trip_count DESC

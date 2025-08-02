@@ -19,7 +19,7 @@ if ($result) {
         $destinationId = $row['id'];
 
         // Get the number of trips for this destination
-        $tripQuery = "SELECT COUNT(*) as trip_count FROM trip WHERE location = $destinationId";
+        $tripQuery = "SELECT COUNT(*) as trip_count FROM trip t INNER JOIN user u ON t.created_by = u.id WHERE t.location = $destinationId AND t.is_active = 1 AND u.is_active = 1";
         $tripResult = mysqli_query($conn, $tripQuery);
         $tripCount = 0;
 

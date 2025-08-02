@@ -65,7 +65,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $location    = $_POST['country'] ?? '';
     $continent   = $_POST['continent'] ?? '';
     $image       = $_FILES['image'] ?? null; // Get image file from POST
-    $is_active   = $_POST['is_active'] ?? 1;
+    $is_active   = $_POST['is_active'] ?? 0;
 
     // Check for token
     $user_id = getUserIdFromToken($token);

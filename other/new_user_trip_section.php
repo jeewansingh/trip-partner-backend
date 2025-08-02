@@ -3,16 +3,7 @@
 require_once "../db_conn.php";
 include("../function/response.php");
 
-$token = $_POST['token'];
-
-// Get user_id from token
-$user_id = getUserIdFromToken($token); 
-if (!$user_id) {
-    api_error_response("Invalid token or user not found.");
-    exit;
-}
-
-function getTrips($destination_id = null, $user_id)
+function getTrips($destination_id = null)
 {
     global $conn;
 
@@ -81,14 +72,6 @@ function getTrips($destination_id = null, $user_id)
 
             $row['date'] = $row['start_date'];
 
-            // Created by same user?
-            $row['same_creator'] = ($user_id == $row['created_by']) ? 1 : 0;
-
-            // User already sent join request?
-            $join_check_query = "SELECT id FROM join_request WHERE sender_id = $user_id AND trip_id = $trip_id";
-            $join_result = mysqli_query($conn, $join_check_query);
-            $row['join_request'] = ($join_result && mysqli_num_rows($join_result) > 0) ? 1 : 0;
-
             $trips[] = $row;
         }
         return $trips;
@@ -99,9 +82,14 @@ function getTrips($destination_id = null, $user_id)
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $destination_id = $_POST['destination_id'] ?? null;
-    $trips = getTrips($destination_id, $user_id);
+    $trips = getTrips($destination_id);
 
-    echo json_encode($trips ?: ["error" => "No trips found."]);
+    if ($trips) {
+        echo json_encode($trips);
+    } else {
+        echo json_encode(["error" => "No trips found."]);
+    }
+
     mysqli_close($conn);
 }
-?>
+?> 
